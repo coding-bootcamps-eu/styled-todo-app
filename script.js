@@ -1,127 +1,126 @@
-const addButton = document.querySelector("#add-button");
-const deleteButton = document.querySelector("#delete-button");
-const todoInput = document.querySelector("#todo-input");
-const todoList = document.querySelector("#todo-list");
-const radioContainer = document.querySelector("#radio-container");
+class TodoApp {
+  constructor() {
+    this.baseUrl = "http://localhost:4730/todos";
+    this.todos = [];
+    this.listElement = document.querySelector("#todo-list");
+    this.addButton = document.querySelector("#add-button");
+    this.textInput = document.querySelector("#todo-input");
+    this.deleteButton = document.querySelector("#delete-button");
 
-/**
- * Eventhandler for keypress event on input
- * @param {*} e
- */
-function addTodoOnEnter(e) {
-  if (e.key.toLowerCase() === "enter") {
-    addTodo();
-  }
-}
-todoInput.addEventListener("keypress", addTodoOnEnter);
+    // Eventhandlers
+    this.addButton.addEventListener("click", this.addNewTodo);
+    this.listElement.addEventListener("change", this.updateTodoStatus);
+    this.deleteButton.addEventListener("click", this.removeDoneTodos);
 
-/**
- * Filter todo list when radio button selection
- * @param {*} e
- */
-function filterTodos(e) {
-  switch (e.target.value) {
-    case "done":
-      showDoneTodos();
-      break;
-    case "open":
-      showOpenTodos();
-      break;
-    case "all":
-      showAllTodos();
-      break;
-  }
-}
-radioContainer.addEventListener("change", filterTodos);
-
-/**
- * add new todo every time the add button is clicked
- */
-function addTodo() {
-  const newTodoText = todoInput.value;
-  if (newTodoText.length < 5) {
-    return;
+    this.loadTodosFromBackend();
   }
 
-  todoInput.value = "";
+  loadTodosFromBackend() {
+    fetch(this.baseUrl)
+      .then((response) => response.json())
+      .then((todosFromApi) => {
+        this.todos = todosFromApi;
+        this.renderTodos();
+      });
+  }
 
-  const newTodoLi = document.createElement("li");
-  newTodoLi.innerText = newTodoText;
+  renderTodos() {
+    this.todos.forEach((todo) => {
+      this.renderTodo(todo);
+    });
+  }
 
-  const checkBox = document.createElement("input");
-  checkBox.setAttribute("type", "checkbox");
-  newTodoLi.appendChild(checkBox);
+  renderTodo(todo) {
+    const liElement = document.createElement("li");
+    liElement.innerText = todo.description;
 
-  todoList.appendChild(newTodoLi);
-}
-addButton.addEventListener("click", addTodo);
+    const checkBox = document.createElement("input");
+    checkBox.setAttribute("type", "checkbox");
+    checkBox.checked = todo.done;
+    liElement.appendChild(checkBox);
 
-/**
- * Show only done todos in list
- */
-function showDoneTodos() {
-  for (let li of todoList.children) {
-    const checkbox = li.querySelector('input[type="checkbox"]');
-    const isChecked = checkbox.checked;
-    if (isChecked === false) {
-      li.hidden = true;
-    } else {
-      li.hidden = false;
+    liElement.todo = todo;
+
+    this.listElement.appendChild(liElement);
+  }
+
+  addNewTodo = () => {
+    const newTodoText = this.textInput.value;
+    if (newTodoText.length < 5) {
+      return;
     }
-  }
+
+    const body = {
+      description: newTodoText,
+      done: false,
+    };
+
+    fetch(this.baseUrl, {
+      method: "POST",
+      headers: { "Content-type": "application/json; charset=UTF-8" },
+      body: JSON.stringify(body),
+    })
+      .then((response) => response.json())
+      .then((newTodoObj) => {
+        this.textInput.value = "";
+        this.todos.push(newTodoObj);
+        this.renderTodo(newTodoObj);
+      });
+  };
+
+  updateTodoStatus = (e) => {
+    const newCheckedStatus = e.target.checked;
+    const todoObj = e.target.parentElement.todo;
+
+    todoObj.done = newCheckedStatus;
+    const putUrl = this.baseUrl + "/" + todoObj.id;
+    fetch(putUrl, {
+      method: "PUT",
+      headers: { "Content-type": "application/json; charset=UTF-8" },
+      body: JSON.stringify(todoObj),
+    }).then(
+      (response) => {
+        if (response.ok === true) {
+          return response.json();
+        } else {
+          e.target.checked = !newCheckedStatus;
+          todoObj.done = !newCheckedStatus;
+        }
+      },
+      () => {
+        e.target.checked = !newCheckedStatus;
+        todoObj.done = !newCheckedStatus;
+      }
+    );
+  };
+
+  removeDoneTodos = () => {
+    const todosToDelete = this.todos.filter((todo) => todo.done === true);
+
+    todosToDelete.forEach((deleteTodo) => {
+      fetch(this.baseUrl + "/" + deleteTodo.id, {
+        method: "DELETE",
+      })
+        .then((response) => response.json())
+        .then(() => {
+          this.todos = this.todos.filter((todo) => todo.id !== deleteTodo.id);
+
+          let foundLi = undefined;
+          const len = this.listElement.children.length;
+          for (let i = 0; i < len; i++) {
+            const li = this.listElement.children[i];
+            if (li.todo.id === deleteTodo.id) {
+              foundLi = li;
+              break;
+            }
+          }
+
+          if (foundLi) {
+            foundLi.remove();
+          }
+        });
+    });
+  };
 }
 
-/**
- * Show only done todos in list
- */
-function showOpenTodos() {
-  for (let li of todoList.children) {
-    const checkbox = li.querySelector('input[type="checkbox"]');
-    const isChecked = checkbox.checked;
-    if (isChecked === true) {
-      li.hidden = true;
-    } else {
-      li.hidden = false;
-    }
-  }
-}
-
-/**
- * Show all todos in list
- */
-function showAllTodos() {
-  for (let li of todoList.children) {
-    li.hidden = false;
-  }
-}
-
-/**
- * Change style of li depending on checkbox state
- * @param {*} e
- */
-function changeTodoStyle(e) {
-  if (e.target.checked === true) {
-    e.target.parentElement.style.textDecoration = "line-through";
-  } else {
-    e.target.parentElement.style.textDecoration = "none";
-  }
-}
-todoList.addEventListener("change", changeTodoStyle);
-
-/**
- * Show only done todos in list
- */
-function removeDoneTodos() {
-  const children = todoList.children;
-  const length = children.length - 1;
-
-  for (let i = length; i >= 0; i--) {
-    const li = children[i];
-    const checkbox = li.querySelector('input[type="checkbox"]');
-    const isChecked = checkbox.checked;
-    if (isChecked === true) {
-      li.remove();
-    }
-  }
-}
-deleteButton.addEventListener("click", removeDoneTodos);
+new TodoApp();
